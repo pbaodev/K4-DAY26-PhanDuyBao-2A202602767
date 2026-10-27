@@ -80,11 +80,28 @@ uv run adk web
 
 Open http://localhost:8000 in your browser, select `weather_agent`, and ask about the weather.
 
+## Chạy thử không cần API key (mock mode)
+
+Không có `WEATHERAPI_KEY` / `GOOGLE_API_KEY` vẫn kiểm chứng được toàn bộ luồng:
+
+```bash
+# Terminal 1 — MCP server trả dữ liệu giả (gắn nhãn [MOCK DATA])
+cd mcp-server && WEATHER_MOCK=1 uv run python weather.py
+
+# Terminal 2 — test end-to-end qua ADK, dùng model giả thay Gemini
+cd mcp-client && uv run python test_agent_mock.py
+```
+
+`test_agent_mock.py` kiểm tra: ADK tự khám phá tool → model chọn `get_current_weather` / `get_forecast`
+→ ADK gọi MCP server → kết quả quay lại model. Dữ liệu mock **không phải thời tiết thật**;
+muốn demo với dữ liệu thật và Gemini thì dùng phần Setup ở trên.
+
 ## Configuration
 
 | Variable | Where | Description |
 |----------|-------|-------------|
 | `WEATHERAPI_KEY` | mcp-server | API key from weatherapi.com |
 | `GOOGLE_API_KEY` | mcp-client/.env | Gemini API key |
+| `WEATHER_MOCK` | mcp-server | Đặt `1` để trả dữ liệu giả, không gọi WeatherAPI |
 | `PORT` | mcp-server (env) | Override server port (default: 8085) |
 | `MCP_SERVER_URL` | mcp-client/.env | MCP endpoint the agent connects to (default: `http://localhost:8085/mcp`; set to your Cloud Run URL + `/mcp` when deployed) |

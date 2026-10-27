@@ -15,8 +15,51 @@ USER_AGENT = "weather-app/1.0"
 # Get API key from environment variable
 API_KEY = os.getenv("WEATHERAPI_KEY")
 
+# Chế độ mock: trả dữ liệu giả cùng schema với WeatherAPI, dùng để demo/test khi
+# không có API key. Bật bằng WEATHER_MOCK=1. Kết quả luôn được gắn nhãn [MOCK DATA].
+MOCK = os.getenv("WEATHER_MOCK", "").lower() in ("1", "true", "yes")
+MOCK_TAG = "[MOCK DATA - not real weather]"
+
+def mock_weather_response(endpoint: str, params: dict[str, str]) -> dict[str, Any]:
+    """Build a fake response with the same shape as WeatherAPI.com."""
+    city = params["q"]
+    # Nhiệt độ giả nhưng ổn định theo tên thành phố (cùng city -> cùng kết quả)
+    base = 20 + sum(map(ord, city.lower())) % 15
+    location = {"name": city.title(), "region": "Mock Region", "country": "Mockland"}
+    if endpoint == "current.json":
+        return {
+            "location": location,
+            "current": {
+                "temp_c": float(base), "temp_f": round(base * 9 / 5 + 32, 1),
+                "feelslike_c": float(base + 1), "feelslike_f": round((base + 1) * 9 / 5 + 32, 1),
+                "condition": {"text": "Partly cloudy"},
+                "humidity": 70, "wind_kph": 12.0, "wind_mph": 7.5, "wind_dir": "NE",
+                "pressure_mb": 1012.0, "uv": 6.0, "vis_km": 10.0,
+                "last_updated": "2026-01-01 12:00",
+            },
+        }
+    days = int(params["days"])
+    return {
+        "location": location,
+        "forecast": {"forecastday": [
+            {
+                "date": f"2026-01-{i + 1:02d}",
+                "day": {
+                    "maxtemp_c": float(base + i), "maxtemp_f": round((base + i) * 9 / 5 + 32, 1),
+                    "mintemp_c": float(base - 6 + i), "mintemp_f": round((base - 6 + i) * 9 / 5 + 32, 1),
+                    "condition": {"text": ["Sunny", "Light rain", "Cloudy"][i % 3]},
+                    "daily_chance_of_rain": 10 + 20 * i, "maxwind_kph": 15.0 + i, "uv": 7.0,
+                },
+            }
+            for i in range(days)
+        ]},
+    }
+
 async def make_weather_request(endpoint: str, params: dict[str, str]) -> dict[str, Any] | None:
     """Make a request to the WeatherAPI with proper error handling."""
+    if MOCK:
+        return mock_weather_response(endpoint, params)
+
     # Check if API key is set
     if not API_KEY:
         print("ERROR: WeatherAPI key not set. Please set WEATHERAPI_KEY environment variable.")
@@ -67,7 +110,7 @@ async def get_current_weather(city: str) -> str:
     current = data["current"]
     location = data["location"]
     
-    return f"""
+    return f"""{MOCK_TAG if MOCK else ""}
 Current Weather for {location['name']}, {location['region']}, {location['country']}:
 
 Temperature: {current['temp_c']}°C ({current['temp_f']}°F)
@@ -111,6 +154,8 @@ async def get_forecast(city: str, days: int = 3) -> str:
     forecast_days = data["forecast"]["forecastday"]
     
     forecasts = []
+    if MOCK:
+        forecasts.append(MOCK_TAG)
     forecasts.append(f"Weather Forecast for {location['name']}, {location['region']}, {location['country']}:")
     
     for day in forecast_days:
@@ -133,7 +178,8 @@ UV Index: {day_data['uv']}
 @mcp.tool()
 async def health_check() -> str:
     """Health check endpoint for deployment verification."""
-    return "✅ Weather MCP Server is running! Ready to provide weather data for Australian cities and worldwide."
+    mode = " (MOCK mode)" if MOCK else ""
+    return f"✅ Weather MCP Server is running{mode}! Ready to provide weather data for Australian cities and worldwide."
 
 print("✅ MCP server initialized with Streamable HTTP transport")
 print("🔧 Available tools: get_current_weather, get_forecast, health_check")
